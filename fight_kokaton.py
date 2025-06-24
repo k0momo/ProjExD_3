@@ -131,21 +131,16 @@ def main():
                 bird.change_img(6, screen)
                 pg.display.update()
                 time.sleep(1)
-                beam = None
-                bombs[i] = None
-                break
-        bombs = [b for b in bombs if b is not None]
-
-        # 練習5-2：こうかとん⇔爆弾の衝突判定
-        for b in bombs:
-            if bird.rct.colliderect(b.rct):
-                fonto = pg.font.Font(None, 80)
-                txt   = fonto.render("Game Over", True, (255, 0, 0))  # 練習4
-                screen.blit(txt, [WIDTH//2-150, HEIGHT//2])
-                bird.change_img(8, screen)
-                pg.display.update()
-                time.sleep(1)
-                return
+                beam = None 
+                bomb = None
+                
+        
+        if bomb is not None and bird.rct.colliderect(bomb.rct):
+            # ゲームオーバー時に，こうかとん画像を切り替え，1秒間表示させる
+            bird.change_img(8, screen)
+            pg.display.update()
+            time.sleep(1)
+            return
 
         key_lst = pg.key.get_pressed()
         bird.update(key_lst, screen)
