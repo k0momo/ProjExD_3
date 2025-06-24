@@ -3,6 +3,7 @@ import random
 import sys
 import time
 import pygame as pg
+import math 
 
 
 WIDTH = 1100  # ゲームウィンドウの幅
@@ -56,6 +57,7 @@ class Bird:
         self.img = __class__.imgs[(+5, 0)]
         self.rct: pg.Rect = self.img.get_rect()
         self.rct.center = xy
+        self.dire: tuple[int, int] = (+5, 0)  # 初期方向は右向き
 
     def change_img(self, num: int, screen: pg.Surface):
         """
@@ -77,7 +79,11 @@ class Bird:
             if key_lst[k]:
                 sum_mv[0] += mv[0]
                 sum_mv[1] += mv[1]
+                
+        if sum_mv != [0, 0]:
+            self.dire = (sum_mv[0], sum_mv[1])
         self.rct.move_ip(sum_mv)
+        
         if check_bound(self.rct) != (True, True):
             self.rct.move_ip(-sum_mv[0], -sum_mv[1])
         if not (sum_mv[0] == 0 and sum_mv[1] == 0):
@@ -101,6 +107,20 @@ class Beam:
         self.rct.centery = bird.rct.centery
         self.rct.left = bird.rct.right  # ビームの左座標＝こうかとんの右座標
         self.vx, self.vy = +5, 0
+        
+        vx, vy = bird.dire 
+        
+        base = pg.image.load("fig/beam.png")
+        
+        theta = math.degrees(math.atan2(-vy, vx)) 
+        
+        self.img = pg.transform.rotozoom(base, theta, 1.0) # ビーム画像をこうかとんの方向に回転
+        
+        self.vx, self.vy = vx, vy # ビームの速度ベクトルをこうかとんの方向に設定
+        
+        self.rct = self.img.get_rect() # ビーム画像のRectを取得
+        self.rct.centerx = bird.rct.centerx + bird.rct.width  * vx / 5 # ビームの中心x座標をこうかとんの中心x座標に設定
+        self.rct.centery = bird.rct.centery + bird.rct.height * vy / 5 # ビームの中心y座標をこうかとんの中心y座標に設定
 
     def update(self, screen: pg.Surface):
         """
@@ -155,6 +175,27 @@ class Score:
         # 画面左下 (x=100, y=HEIGHT-50) に表示
         screen.blit(img, (100, HEIGHT-50))
         
+class Explosion:
+    """
+    爆弾が消えたときに表示する爆発エフェクト
+    """
+    def __init__(self, center: tuple[int,int]):
+        # 一連のアニメーション画像をロード
+        img0 = pg.image.load("fig/explosion.gif")
+        img1 = pg.transform.flip(img0, True, False)
+        img2 = pg.transform.flip(img0, False, True)
+        self.frames = [img0, img1, img2]
+        
+        self.life = 30
+        
+        self.rct = self.frames[0].get_rect(center=center)
+
+    def update(self, screen: pg.Surface):
+        if self.life > 0:
+            # life の偶奇で交互に切り替え演出
+            frame = self.frames[self.life % len(self.frames)]
+            screen.blit(frame, self.rct)
+            self.life -= 1
 
 
 def main():
@@ -164,10 +205,11 @@ def main():
     bird = Bird((300, 200))
     bombs = [Bomb((255, 0, 0), 10) for _ in range(NUM_OF_BOMBS)]
     beams: list[Beam] = []  # ゲーム初期化時にはビームは存在しない
+    explosions: list[Explosion] = []  # 爆発エフェクトのリスト
     
     clock = pg.time.Clock()
     tmr = 0
-    score = Score()
+    score = Score()  
     
     while True:
         for event in pg.event.get():
@@ -179,17 +221,6 @@ def main():
                        
         screen.blit(bg_img, [0, 0])
         
-        for bomb in bombs:
-            if bird.rct.colliderect(bomb.rct):
-                # ゲームオーバー時に，こうかとん画像を切り替え，1秒間表示させる
-                bird.change_img(8, screen)
-                fonto = pg.font.Font(None, 80)
-                txt = fonto.render("GAME OVER", True, (255, 0, 0))
-                screen.blit(txt, [WIDTH//2-150, HEIGHT//2])
-                pg.display.update()
-                time.sleep(2)
-                return
-        
         for i, bm in enumerate(beams):
             if bm is None:
                 continue
@@ -200,15 +231,31 @@ def main():
                     # ビーム／爆弾を消去
                     beams[i] = None
                     bombs[j]  = None
+                    
+                    explosions.append(Explosion(b.rct.center))
+                    
                     # スコア加算＋喜ぶエフェクト
                     score.score += 1
                     bird.change_img(6, screen)
-                    pg.display.update()
-                    time.sleep(1)
+                    pg.display.update()  
                     break
         # None 要素を除去
         beams = [bm for bm in beams if bm is not None]
         bombs = [b  for b  in bombs if b  is not None]
+        
+        explosions = [ ex for ex in explosions if ex.life > 0 ]
+        
+        for b in bombs:
+            if bird.rct.colliderect(b.rct):
+                # ゲームオーバー時に，こうかとん画像を切り替え，1秒間表示させる
+                bird.change_img(8, screen)
+                fonto = pg.font.Font(None, 80)
+                txt = fonto.render("GAME OVER", True, (255, 0, 0))
+                screen.blit(txt, [WIDTH//2-150, HEIGHT//2])
+                pg.display.update()
+                time.sleep(2) 
+                return
+            
 
         key_lst = pg.key.get_pressed()
         bird.update(key_lst, screen)
@@ -222,6 +269,9 @@ def main():
         # 爆弾の移動
         for b in bombs:
             b.update(screen)
+            
+        for ex in explosions:
+            ex.update(screen)     
            
         score.update(screen)
         
